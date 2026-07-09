@@ -1,121 +1,203 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const MyApp());
+  runApp(const NexusApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class NexusApp extends StatelessWidget {
+  const NexusApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Workshop Nexus',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const CaptureHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+class Capture {
+  final String id;
   final String title;
+  final String content;
+  final String captureType;
+  final String createdAt;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Capture({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.captureType,
+    required this.createdAt,
+  });
+
+  factory Capture.fromJson(Map<String, dynamic> json) {
+    return Capture(
+      id: json['id'],
+      title: json['title'],
+      content: json['content'],
+      captureType: json['capture_type'],
+      createdAt: json['created_at'],
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class CaptureHomePage extends StatefulWidget {
+  const CaptureHomePage({super.key});
 
-  void _incrementCounter() {
+  @override
+  State<CaptureHomePage> createState() => _CaptureHomePageState();
+}
+
+class _CaptureHomePageState extends State<CaptureHomePage> {
+  final TextEditingController _controller = TextEditingController();
+  final String _apiBaseUrl = 'http://127.0.0.1:8000';
+
+  List<Capture> _captures = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCaptures();
+  }
+
+  Future<void> _loadCaptures() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isLoading = true;
+      _errorMessage = null;
     });
+
+    try {
+      final response = await http.get(Uri.parse('$_apiBaseUrl/captures'));
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load captures');
+      }
+
+      final List<dynamic> data = jsonDecode(response.body);
+
+      setState(() {
+        _captures = data.map((item) => Capture.fromJson(item)).toList();
+      });
+    } catch (error) {
+      setState(() {
+        _errorMessage = 'Could not connect to Nexus backend.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _saveCapture() async {
+    final content = _controller.text.trim();
+
+    if (content.isEmpty) {
+      return;
+    }
+
+    final title = content.length > 40 ? '${content.substring(0, 40)}...' : content;
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_apiBaseUrl/captures'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'title': title,
+          'content': content,
+          'capture_type': 'text',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to save capture');
+      }
+
+      _controller.clear();
+      await _loadCaptures();
+    } catch (error) {
+      setState(() {
+        _errorMessage = 'Could not save capture.';
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Workshop Nexus',
+                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'What would you like to remember?',
+                  style: TextStyle(fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _controller,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Type a thought, idea, task, note, or project detail...',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: _saveCapture,
+                  child: const Text('Save Capture'),
+                ),
+                const SizedBox(height: 24),
+                if (_errorMessage != null)
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                const Text(
+                  'Recent Captures',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView.builder(
+                          itemCount: _captures.length,
+                          itemBuilder: (context, index) {
+                            final capture = _captures[index];
+
+                            return Card(
+                              child: ListTile(
+                                title: Text(capture.title),
+                                subtitle: Text(capture.content),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
