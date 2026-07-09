@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from backend.app.api.captures import router as captures_router
 from backend.app.api.sessions import router as sessions_router
 from backend.app.database import create_db_and_tables
 
@@ -12,6 +13,7 @@ def on_startup():
 
 
 app.include_router(sessions_router)
+app.include_router(captures_router)
 
 
 @app.get("/health")
@@ -30,5 +32,5 @@ def nexus_identity():
         "architecture": "API-first",
         "knowledge_engine": "Inactive",
         "database": "SQLite",
-        "modules": ["sessions"],
+        "modules": ["sessions", "captures"],
     }
