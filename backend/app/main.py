@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 
 from backend.app.api.sessions import router as sessions_router
+from backend.app.database import create_db_and_tables
 
 app = FastAPI(title="Workshop Nexus")
+
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+
 
 app.include_router(sessions_router)
 
@@ -22,6 +29,6 @@ def nexus_identity():
         "status": "Online",
         "architecture": "API-first",
         "knowledge_engine": "Inactive",
-        "database": "In-memory",
+        "database": "SQLite",
         "modules": ["sessions"],
     }

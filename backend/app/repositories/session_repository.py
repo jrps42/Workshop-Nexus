@@ -1,35 +1,43 @@
 from uuid import UUID
 
+from sqlmodel import Session as DatabaseSession, select
+
 from backend.app.models.session import Session
 
 
 class SessionRepository:
     """
-    In-memory storage for Sessions.
-
-    This will later be replaced with SQLite without changing the API/service layer.
+    SQLite-backed storage for Sessions.
     """
 
-    def __init__(self):
-        self._sessions: dict[UUID, Session] = {}
+    def __init__(self, database_session: DatabaseSession):
+        self.database_session = database_session
 
     def create(self, session: Session) -> Session:
-        self._sessions[session.id] = session
+        self.database_session.add(session)
+        self.database_session.commit()
+        self.database_session.refresh(session)
         return session
 
     def get_by_id(self, session_id: UUID) -> Session | None:
-        return self._sessions.get(session_id)
+        return self.database_session.get(Session, session_id)
 
     def list_all(self) -> list[Session]:
-        return list(self._sessions.values())
+        statement = select(Session)
+        return list(self.database_session.exec(statement).all())
 
     def update(self, session: Session) -> Session:
-        self._sessions[session.id] = session
+        self.database_session.add(session)
+        self.database_session.commit()
+        self.database_session.refresh(session)
         return session
 
     def delete(self, session_id: UUID) -> bool:
-        if session_id not in self._sessions:
+        session = self.get_by_id(session_id)
+
+        if session is None:
             return False
 
-        del self._sessions[session_id]
+        self.database_session.delete(session)
+        self.database_session.commit()
         return True
