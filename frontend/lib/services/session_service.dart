@@ -1,36 +1,78 @@
-class NexusSession {
-  final String id;
-  final String title;
-  final String? summary;
-  final String? location;
-  final String? workspaceId;
-  final String status;
-  final String startedAt;
-  final String? endedAt;
+import 'dart:convert';
 
-  const NexusSession({
-    required this.id,
-    required this.title,
-    required this.status,
-    required this.startedAt,
-    this.summary,
-    this.location,
-    this.workspaceId,
-    this.endedAt,
-  });
+import 'package:http/http.dart' as http;
 
-  bool get isActive => status == 'active';
+import '../models/session.dart';
+import 'api.dart';
 
-  factory NexusSession.fromJson(Map<String, dynamic> json) {
-    return NexusSession(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      summary: json['summary'] as String?,
-      location: json['location'] as String?,
-      workspaceId: json['workspace_id'] as String?,
-      status: json['status'] as String,
-      startedAt: json['started_at'] as String,
-      endedAt: json['ended_at'] as String?,
+class SessionService {
+  Future<List<NexusSession>> getSessions() async {
+    final response = await http.get(
+      Uri.parse('${Api.baseUrl}/sessions'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load sessions: ${response.statusCode}',
+      );
+    }
+
+    final List<dynamic> data = jsonDecode(response.body);
+
+    return data
+        .map(
+          (item) => NexusSession.fromJson(
+            item as Map<String, dynamic>,
+          ),
+        )
+        .toList();
+  }
+
+  Future<NexusSession> createSession({
+    required String title,
+    String? summary,
+    String? location,
+    String? workspaceId,
+  }) async {
+    final response = await http.post(
+      Uri.parse('${Api.baseUrl}/sessions'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'title': title,
+        'summary': summary,
+        'location': location,
+        'workspace_id': workspaceId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to create session: ${response.statusCode}',
+      );
+    }
+
+    return NexusSession.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+  }
+
+  Future<NexusSession> completeSession(
+    String sessionId,
+  ) async {
+    final response = await http.post(
+      Uri.parse(
+        '${Api.baseUrl}/sessions/$sessionId/complete',
+      ),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to complete session: ${response.statusCode}',
+      );
+    }
+
+    return NexusSession.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
     );
   }
 }
