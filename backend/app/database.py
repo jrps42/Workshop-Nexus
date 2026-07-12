@@ -31,6 +31,15 @@ def migrate_database() -> None:
                     )
                 )
 
+        if "session_id" not in capture_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE capture "
+                        "ADD COLUMN session_id CHAR(32)"
+                    )
+                )
+
     if "session" in table_names:
         session_columns = {
             column["name"]

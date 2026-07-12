@@ -18,10 +18,22 @@ class CaptureBase(SQLModel):
     content: str
     capture_type: CaptureType = CaptureType.TEXT
 
+    workspace_id: UUID | None = Field(
+        default=None,
+        foreign_key="workspace.id",
+    )
+
+    session_id: UUID | None = Field(
+        default=None,
+        foreign_key="session.id",
+    )
+
 
 class CaptureCreate(CaptureBase):
     """
-    Data required to create a new capture.
+    Data accepted when creating a capture.
+
+    Both workspace and session context are optional.
     """
 
     pass
@@ -29,16 +41,11 @@ class CaptureCreate(CaptureBase):
 
 class Capture(CaptureBase, table=True):
     """
-    Represents a quick captured thought, note, link, or future artifact.
+    Represents a quick thought, note, link, or future artifact.
     """
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
-    )
-
-    workspace_id: UUID | None = Field(
-        default=None,
-        foreign_key="workspace.id",
     )
