@@ -6,7 +6,7 @@ from sqlmodel import Session as DatabaseSession
 from backend.app.database import get_database_session
 from backend.app.models.workspace import Workspace, WorkspaceCreate
 from backend.app.repositories.workspace_repository import WorkspaceRepository
-from backend.app.services.workspace_service import WorkspaceService
+from backend.app.services.workspace_service import (WorkspaceAlreadyExistsError, WorkspaceService,)
 
 router = APIRouter(
     prefix="/workspaces",
@@ -26,7 +26,13 @@ def create_workspace(
     data: WorkspaceCreate,
     service: WorkspaceService = Depends(get_workspace_service),
 ):
-    return service.create_workspace(data)
+    try:
+        return service.create_workspace(data)
+    except WorkspaceAlreadyExistsError as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error),
+        ) from error
 
 
 @router.get("", response_model=list[Workspace])

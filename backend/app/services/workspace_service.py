@@ -4,6 +4,10 @@ from backend.app.models.workspace import Workspace, WorkspaceCreate
 from backend.app.repositories.workspace_repository import WorkspaceRepository
 
 
+class WorkspaceAlreadyExistsError(Exception):
+    """Raised when a workspace name is already in use."""
+
+
 class WorkspaceService:
     """Business logic for workspaces."""
 
@@ -11,10 +15,18 @@ class WorkspaceService:
         self.repository = repository
 
     def create_workspace(self, data: WorkspaceCreate) -> Workspace:
+        cleaned_name = data.name.strip()
+
+        if self.repository.get_by_name(cleaned_name) is not None:
+            raise WorkspaceAlreadyExistsError(
+                f'A workspace named "{cleaned_name}" already exists.'
+            )
+
         workspace = Workspace(
-            name=data.name,
+            name=cleaned_name,
             description=data.description,
         )
+
         return self.repository.create(workspace)
 
     def list_workspaces(self) -> list[Workspace]:

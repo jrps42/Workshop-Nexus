@@ -14,23 +14,37 @@ def migrate_database() -> None:
     """
 
     inspector = inspect(engine)
+    table_names = inspector.get_table_names()
 
-    if "capture" not in inspector.get_table_names():
-        return
+    if "capture" in table_names:
+        capture_columns = {
+            column["name"]
+            for column in inspector.get_columns("capture")
+        }
 
-    capture_columns = {
-        column["name"]
-        for column in inspector.get_columns("capture")
-    }
-
-    if "workspace_id" not in capture_columns:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "ALTER TABLE capture "
-                    "ADD COLUMN workspace_id CHAR(32)"
+        if "workspace_id" not in capture_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE capture "
+                        "ADD COLUMN workspace_id CHAR(32)"
+                    )
                 )
-            )
+
+    if "session" in table_names:
+        session_columns = {
+            column["name"]
+            for column in inspector.get_columns("session")
+        }
+
+        if "workspace_id" not in session_columns:
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "ALTER TABLE session "
+                        "ADD COLUMN workspace_id CHAR(32)"
+                    )
+                )
 
 
 def create_db_and_tables() -> None:

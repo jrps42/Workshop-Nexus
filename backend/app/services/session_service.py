@@ -17,7 +17,9 @@ class SessionService:
             title=data.title,
             summary=data.summary,
             location=data.location,
+            workspace_id=data.workspace_id,
         )
+
         return self.repository.create(session)
 
     def list_sessions(self) -> list[Session]:

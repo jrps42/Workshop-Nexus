@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlmodel import Session as DatabaseSession, select
+from sqlmodel import Session as DatabaseSession, func, select
 
 from backend.app.models.workspace import Workspace
 
@@ -19,6 +19,15 @@ class WorkspaceRepository:
 
     def get_by_id(self, workspace_id: UUID) -> Workspace | None:
         return self.database_session.get(Workspace, workspace_id)
+
+    def get_by_name(self, name: str) -> Workspace | None:
+        normalized_name = name.strip().lower()
+
+        statement = select(Workspace).where(
+            func.lower(Workspace.name) == normalized_name
+        )
+
+        return self.database_session.exec(statement).first()
 
     def list_all(self) -> list[Workspace]:
         statement = select(Workspace).order_by(Workspace.name)
