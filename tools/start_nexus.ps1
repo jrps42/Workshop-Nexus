@@ -1,12 +1,31 @@
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$frontendPath = Join-Path $projectRoot "frontend"
+$backendScript = Join-Path $PSScriptRoot "start_backend.ps1"
+$frontendScript = Join-Path $PSScriptRoot "start_frontend.ps1"
 
-if (-not (Test-Path $frontendPath)) {
-    Write-Error "Flutter frontend not found at $frontendPath"
-    exit 1
-}
+Write-Host "Launching Workshop Nexus..."
 
-Set-Location $frontendPath
+Start-Process `
+    -FilePath "powershell.exe" `
+    -WorkingDirectory $projectRoot `
+    -ArgumentList @(
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $backendScript
+    )
 
-Write-Host "Starting Workshop Nexus frontend..."
-flutter run -d windows
+Start-Sleep -Seconds 3
+
+Start-Process `
+    -FilePath "powershell.exe" `
+    -WorkingDirectory $projectRoot `
+    -ArgumentList @(
+        "-NoExit",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $frontendScript
+    )
+
+Write-Host "Backend and frontend processes started."
