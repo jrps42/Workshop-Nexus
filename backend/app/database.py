@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, create_engine, Session as DatabaseSession
+from backend.app.models.workspace import Workspace
 
 DATABASE_URL = "sqlite:///database/nexus.db"
 
