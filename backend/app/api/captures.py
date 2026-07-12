@@ -8,8 +8,12 @@ from backend.app.models.capture import Capture, CaptureCreate
 from backend.app.repositories.capture_repository import CaptureRepository
 from backend.app.services.capture_service import CaptureService
 
+from pydantic import BaseModel
+
 router = APIRouter(prefix="/captures", tags=["captures"])
 
+class CaptureWorkspaceAssignment(BaseModel):
+    workspace_id: UUID | None
 
 def get_capture_service(
     database_session: DatabaseSession = Depends(get_database_session),
@@ -57,3 +61,23 @@ def delete_capture(
         raise HTTPException(status_code=404, detail="Capture not found")
 
     return {"deleted": True}
+
+
+@router.patch("/{capture_id}/workspace", response_model=Capture)
+def assign_capture_workspace(
+    capture_id: UUID,
+    assignment: CaptureWorkspaceAssignment,
+    service: CaptureService = Depends(get_capture_service),
+):
+    capture = service.assign_workspace(
+        capture_id=capture_id,
+        workspace_id=assignment.workspace_id,
+    )
+
+    if capture is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Capture not found",
+        )
+
+    return capture

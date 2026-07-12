@@ -33,4 +33,12 @@ class Capture(CaptureBase, table=True):
     """
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+    workspace_id: UUID | None = Field(
+        default=None,
+        foreign_key="workspace.id",
+    )

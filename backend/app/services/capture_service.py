@@ -28,3 +28,8 @@ class CaptureService:
 
     def delete_capture(self, capture_id: UUID) -> bool:
         return self.repository.delete(capture_id)
+
+    def assign_workspace(self,capture_id: UUID,workspace_id: UUID | None,) -> Capture | None: return self.repository.assign_workspace(
+    capture_id=capture_id,
+    workspace_id=workspace_id,
+)
