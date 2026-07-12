@@ -31,6 +31,8 @@ class CaptureService {
   Future<Capture> createCapture({
     required String title,
     required String content,
+    String? workspaceId,
+    String? sessionId,
   }) async {
     final response = await http.post(
       Uri.parse('${Api.baseUrl}/captures'),
@@ -39,6 +41,8 @@ class CaptureService {
         'title': title,
         'content': content,
         'capture_type': 'text',
+        'workspace_id': workspaceId,
+        'session_id': sessionId,
       }),
     );
 

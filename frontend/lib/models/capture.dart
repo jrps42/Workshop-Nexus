@@ -5,6 +5,7 @@ class Capture {
   final String captureType;
   final String createdAt;
   final String? workspaceId;
+  final String? sessionId;
 
   const Capture({
     required this.id,
@@ -13,6 +14,7 @@ class Capture {
     required this.captureType,
     required this.createdAt,
     this.workspaceId,
+    this.sessionId,
   });
 
   factory Capture.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class Capture {
       captureType: json['capture_type'] as String,
       createdAt: json['created_at'] as String,
       workspaceId: json['workspace_id'] as String?,
+      sessionId: json['session_id'] as String?,
     );
   }
 }
