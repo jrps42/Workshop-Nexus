@@ -7,6 +7,7 @@ import '../models/capture.dart';
 import '../models/session.dart';
 import '../models/workspace.dart';
 import '../services/capture_service.dart';
+import '../services/routing_service.dart';
 import '../services/session_service.dart';
 import '../services/workspace_service.dart';
 import '../widgets/capture_editor.dart';
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final CaptureService _captureService = CaptureService();
   final WorkspaceService _workspaceService = WorkspaceService();
   final SessionService _sessionService = SessionService();
+  final RoutingService _routingService = RoutingService();
 
   List<Capture> _captures = [];
   List<Workspace> _workspaces = [];
@@ -184,12 +186,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '${content.substring(0, 40)}...'
         : content;
 
-    final workspaceId =
-        ignoreContext ? null : _activeWorkspaceId;
-
-    final sessionId =
-        ignoreContext ? null : _activeSessionId;
-
     setState(() {
       _isSaving = true;
       _errorMessage = null;
@@ -197,6 +193,22 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      String? workspaceId;
+      String? sessionId;
+      String destination = 'inbox';
+
+      if (!ignoreContext) {
+        final decision = await _routingService.suggest(
+          content: content,
+          activeWorkspaceId: _activeWorkspaceId,
+          activeSessionId: _activeSessionId,
+        );
+
+        workspaceId = decision.workspaceId;
+        sessionId = decision.sessionId;
+        destination = decision.destination;
+      }
+
       await _captureService.createCapture(
         title: title,
         content: content,
@@ -211,22 +223,35 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      _showTemporaryStatus(
-        ignoreContext
-            ? 'Saved to Inbox ✓'
-            : _activeSessionId != null
-                ? 'Saved to active session ✓'
-                : _activeWorkspaceId != null
-                    ? 'Saved to workspace ✓'
-                    : 'Saved to Inbox ✓',
-      );
+      if (ignoreContext) {
+        _showTemporaryStatus('Saved → Inbox ✓');
+      } else {
+        switch (destination) {
+          case 'active_session':
+            _showTemporaryStatus('Saved → Active Session ✓');
+            break;
+
+          case 'active_workspace':
+            _showTemporaryStatus('Saved → Active Workspace ✓');
+            break;
+
+          case 'workspace':
+            _showTemporaryStatus(
+              'Saved → ${_workspaceName(workspaceId)} ✓',
+            );
+            break;
+
+          default:
+            _showTemporaryStatus('Saved → Inbox ✓');
+        }
+      }
     } catch (_) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _errorMessage = 'Could not save capture.';
+        _errorMessage = 'Could not route or save capture.';
       });
     } finally {
       if (mounted) {
@@ -376,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _statusMessage = message;
     });
 
-    Timer(const Duration(seconds: 1), () {
+    Timer(const Duration(seconds: 2), () {
       if (!mounted) {
         return;
       }
