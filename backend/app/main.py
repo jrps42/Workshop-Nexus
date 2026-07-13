@@ -6,6 +6,8 @@ from backend.app.database import create_db_and_tables
 
 from backend.app.api.workspaces import router as workspaces_router
 
+from backend.app.api.routing import router as routing_router
+
 app = FastAPI(title="Workshop Nexus")
 
 
@@ -17,7 +19,7 @@ def on_startup():
 app.include_router(sessions_router)
 app.include_router(captures_router)
 app.include_router(workspaces_router)
-
+app.include_router(routing_router)
 
 @app.get("/health")
 def health():
