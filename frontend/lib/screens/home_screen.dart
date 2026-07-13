@@ -9,7 +9,12 @@ import '../models/workspace.dart';
 import '../services/capture_service.dart';
 import '../services/session_service.dart';
 import '../services/workspace_service.dart';
+import '../widgets/capture_editor.dart';
+import '../widgets/capture_list.dart';
 import '../widgets/create_session_dialog.dart';
+import '../widgets/current_context_panel.dart';
+import '../widgets/session_history_dialog.dart';
+import '../widgets/workspace_sidebar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -179,8 +184,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '${content.substring(0, 40)}...'
         : content;
 
-    final workspaceId = ignoreContext ? null : _activeWorkspaceId;
-    final sessionId = ignoreContext ? null : _activeSessionId;
+    final workspaceId =
+        ignoreContext ? null : _activeWorkspaceId;
+
+    final sessionId =
+        ignoreContext ? null : _activeSessionId;
 
     setState(() {
       _isSaving = true;
@@ -348,6 +356,21 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _showSessionHistory() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => SessionHistoryDialog(
+        sessions: _sessions,
+        captures: _captures,
+        workspaces: _workspaces,
+      ),
+    );
+
+    if (mounted) {
+      _captureFocusNode.requestFocus();
+    }
+  }
+
   void _showTemporaryStatus(String message) {
     setState(() {
       _statusMessage = message;
@@ -408,17 +431,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final keyboard = HardwareKeyboard.instance;
-    final isControlPressed = keyboard.isControlPressed;
-    final isShiftPressed = keyboard.isShiftPressed;
 
-    if (isControlPressed &&
-        isShiftPressed &&
+    if (keyboard.isControlPressed &&
+        keyboard.isShiftPressed &&
         event.logicalKey == LogicalKeyboardKey.enter) {
       _saveCapture(ignoreContext: true);
       return KeyEventResult.handled;
     }
 
-    if (isControlPressed &&
+    if (keyboard.isControlPressed &&
         event.logicalKey == LogicalKeyboardKey.enter) {
       _saveCapture();
       return KeyEventResult.handled;
@@ -479,434 +500,113 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Unknown workspace';
   }
 
-  String? _safeWorkspaceValue(String? workspaceId) {
-    if (workspaceId == null) {
-      return null;
-    }
-
-    final exists = _workspaces.any(
-      (workspace) => workspace.id == workspaceId,
-    );
-
-    return exists ? workspaceId : null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final visibleCaptures = _visibleCaptures;
 
+    final heading = _selectedWorkspaceFilterId == null
+        ? 'All Captures'
+        : _selectedWorkspaceFilterId == 'inbox'
+            ? 'Inbox'
+            : _workspaceName(_selectedWorkspaceFilterId);
+
     return Scaffold(
       body: Row(
         children: [
-          _buildWorkspaceSidebar(),
+          WorkspaceSidebar(
+            workspaces: _workspaces,
+            isLoading: _isLoadingWorkspaces,
+            selectedFilterId: _selectedWorkspaceFilterId,
+            onFilterSelected: (filterId) {
+              setState(() {
+                _selectedWorkspaceFilterId = filterId;
+              });
+            },
+          ),
           const VerticalDivider(width: 1),
           Expanded(
-            child: _buildMainContent(visibleCaptures),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Workshop Nexus',
+                        style: TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      CurrentContextPanel(
+                        workspaces: _workspaces,
+                        availableSessions: _availableSessions,
+                        isLoadingSessions: _isLoadingSessions,
+                        activeWorkspaceId: _activeWorkspaceId,
+                        activeSessionId: _activeSessionId,
+                        onWorkspaceChanged:
+                            _selectActiveWorkspace,
+                        onSessionChanged: (sessionId) {
+                          setState(() {
+                            _activeSessionId = sessionId;
+                          });
+
+                          _captureFocusNode.requestFocus();
+                        },
+                        onLeaveContext: _leaveContext,
+                        onStartSession: _createSession,
+                        onCompleteSession:
+                            _completeActiveSession,
+                        onShowSessionHistory:
+                            _showSessionHistory,
+                      ),
+                      const SizedBox(height: 20),
+                      CaptureEditor(
+                        controller: _controller,
+                        focusNode: _captureFocusNode,
+                        isSaving: _isSaving,
+                        statusMessage: _statusMessage,
+                        errorMessage: _errorMessage,
+                        onKeyEvent: _handleKeyEvent,
+                        onSave: _saveCapture,
+                        onSaveToInbox: () {
+                          _saveCapture(ignoreContext: true);
+                        },
+                        onClear: _clearCaptureBox,
+                        onRefresh: _loadInitialData,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        heading,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: CaptureList(
+                          captures: visibleCaptures,
+                          workspaces: _workspaces,
+                          isLoading: _isLoadingCaptures,
+                          onWorkspaceChanged:
+                              _assignWorkspace,
+                          onDelete: _deleteCapture,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildWorkspaceSidebar() {
-    return SizedBox(
-      width: 250,
-      child: Material(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerLow,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Workspaces',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.all_inbox),
-                title: const Text('All Captures'),
-                selected: _selectedWorkspaceFilterId == null,
-                onTap: () {
-                  setState(() {
-                    _selectedWorkspaceFilterId = null;
-                  });
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.inbox_outlined),
-                title: const Text('Inbox'),
-                selected: _selectedWorkspaceFilterId == 'inbox',
-                onTap: () {
-                  setState(() {
-                    _selectedWorkspaceFilterId = 'inbox';
-                  });
-                },
-              ),
-              const Divider(),
-              if (_isLoadingWorkspaces)
-                const Center(
-                  child: CircularProgressIndicator(),
-                )
-              else
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _workspaces.length,
-                    itemBuilder: (context, index) {
-                      final workspace = _workspaces[index];
-
-                      return ListTile(
-                        leading:
-                            const Icon(Icons.folder_outlined),
-                        title: Text(workspace.name),
-                        subtitle: workspace.description == null
-                            ? null
-                            : Text(
-                                workspace.description!,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        selected:
-                            _selectedWorkspaceFilterId ==
-                                workspace.id,
-                        onTap: () {
-                          setState(() {
-                            _selectedWorkspaceFilterId =
-                                workspace.id;
-                          });
-                        },
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMainContent(List<Capture> visibleCaptures) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 820),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Workshop Nexus',
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              _buildContextPanel(),
-              const SizedBox(height: 20),
-              const Text(
-                'What would you like to remember?',
-                style: TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 12),
-              Focus(
-                focusNode: _captureFocusNode,
-                onKeyEvent: _handleKeyEvent,
-                child: TextField(
-                  controller: _controller,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText:
-                        'Type a thought, idea, task, note, or project detail...',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  ElevatedButton(
-                    onPressed: _isSaving ? null : _saveCapture,
-                    child: Text(
-                      _isSaving
-                          ? 'Saving...'
-                          : 'Save Capture',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: _isSaving
-                        ? null
-                        : () {
-                            _saveCapture(ignoreContext: true);
-                          },
-                    child: const Text('Save to Inbox'),
-                  ),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: _clearCaptureBox,
-                    child: const Text('Clear'),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _loadInitialData,
-                    tooltip: 'Refresh',
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Ctrl+Enter: save with context · '
-                'Ctrl+Shift+Enter: save to Inbox',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              if (_statusMessage != null)
-                Text(
-                  _statusMessage!,
-                  style: const TextStyle(color: Colors.green),
-                ),
-              if (_errorMessage != null)
-                Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              const SizedBox(height: 12),
-              Text(
-                _selectedWorkspaceFilterId == null
-                    ? 'All Captures'
-                    : _selectedWorkspaceFilterId == 'inbox'
-                        ? 'Inbox'
-                        : _workspaceName(
-                            _selectedWorkspaceFilterId,
-                          ),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: _buildCaptureList(visibleCaptures),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContextPanel() {
-    final availableSessions = _availableSessions;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.adjust),
-                const SizedBox(width: 8),
-                const Text(
-                  'Current Context',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _activeWorkspaceId == null &&
-                          _activeSessionId == null
-                      ? null
-                      : _leaveContext,
-                  icon: const Icon(Icons.clear),
-                  label: const Text('Leave Context'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _activeWorkspaceId,
-                    decoration: const InputDecoration(
-                      labelText: 'Active Workspace',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('No workspace — Inbox'),
-                      ),
-                      ..._workspaces.map(
-                        (workspace) =>
-                            DropdownMenuItem<String?>(
-                          value: workspace.id,
-                          child: Text(workspace.name),
-                        ),
-                      ),
-                    ],
-                    onChanged: _selectActiveWorkspace,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _activeSessionId,
-                    decoration: const InputDecoration(
-                      labelText: 'Active Session',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('No session'),
-                      ),
-                      ...availableSessions.map(
-                        (session) =>
-                            DropdownMenuItem<String?>(
-                          value: session.id,
-                          child: Text(session.title),
-                        ),
-                      ),
-                    ],
-                    onChanged: _isLoadingSessions
-                        ? null
-                        : (sessionId) {
-                            setState(() {
-                              _activeSessionId = sessionId;
-                            });
-
-                            _captureFocusNode.requestFocus();
-                          },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FilledButton.icon(
-                  onPressed: _createSession,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start New Session'),
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _activeSessionId == null
-                      ? null
-                      : _completeActiveSession,
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Complete Active Session'),
-                ),
-                const Spacer(),
-                Text(
-                  _activeSessionId == null
-                      ? 'No active session'
-                      : 'New captures use the active session',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCaptureList(List<Capture> captures) {
-    if (_isLoadingCaptures) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (captures.isEmpty) {
-      return const Center(
-        child: Text('No captures here yet.'),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: captures.length,
-      itemBuilder: (context, index) {
-        final capture = captures[index];
-
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  capture.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(capture.content),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String?>(
-                        initialValue: _safeWorkspaceValue(
-                          capture.workspaceId,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Workspace',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Inbox'),
-                          ),
-                          ..._workspaces.map(
-                            (workspace) =>
-                                DropdownMenuItem<String?>(
-                              value: workspace.id,
-                              child: Text(workspace.name),
-                            ),
-                          ),
-                        ],
-                        onChanged: (workspaceId) {
-                          _assignWorkspace(
-                            capture.id,
-                            workspaceId,
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Delete capture',
-                      onPressed: () {
-                        _deleteCapture(capture.id);
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
