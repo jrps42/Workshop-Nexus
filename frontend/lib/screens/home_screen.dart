@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/capture.dart';
+import '../models/routing_decision.dart';
 import '../models/session.dart';
 import '../models/workspace.dart';
 import '../services/capture_service.dart';
@@ -14,6 +15,7 @@ import '../widgets/capture_editor.dart';
 import '../widgets/capture_list.dart';
 import '../widgets/create_session_dialog.dart';
 import '../widgets/current_context_panel.dart';
+import '../widgets/routing_feedback_banner.dart';
 import '../widgets/session_history_dialog.dart';
 import '../widgets/workspace_sidebar.dart';
 
@@ -48,6 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String? _errorMessage;
   String? _statusMessage;
+
+  RoutingDecision? _lastRoutingDecision;
+  String _lastRoutingDestinationName = 'Inbox';
 
   @override
   void initState() {
@@ -190,23 +195,29 @@ class _HomeScreenState extends State<HomeScreen> {
       _isSaving = true;
       _errorMessage = null;
       _statusMessage = null;
+
+      if (ignoreContext) {
+        _lastRoutingDecision = null;
+        _lastRoutingDestinationName = 'Inbox';
+      }
     });
 
     try {
       String? workspaceId;
       String? sessionId;
       String destination = 'inbox';
+      RoutingDecision? routingDecision;
 
       if (!ignoreContext) {
-        final decision = await _routingService.suggest(
+        routingDecision = await _routingService.suggest(
           content: content,
           activeWorkspaceId: _activeWorkspaceId,
           activeSessionId: _activeSessionId,
         );
 
-        workspaceId = decision.workspaceId;
-        sessionId = decision.sessionId;
-        destination = decision.destination;
+        workspaceId = routingDecision.workspaceId;
+        sessionId = routingDecision.sessionId;
+        destination = routingDecision.destination;
       }
 
       await _captureService.createCapture(
@@ -223,21 +234,36 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      setState(() {
+        _lastRoutingDecision = routingDecision;
+
+        if (routingDecision == null) {
+          _lastRoutingDestinationName = 'Inbox';
+        } else if (routingDecision.sessionId != null) {
+          _lastRoutingDestinationName = _sessionName(
+            routingDecision.sessionId,
+          );
+        } else {
+          _lastRoutingDestinationName = _workspaceName(
+            routingDecision.workspaceId,
+          );
+        }
+      });
+
       if (ignoreContext) {
         _showTemporaryStatus('Saved → Inbox ✓');
       } else {
         switch (destination) {
           case 'active_session':
-            _showTemporaryStatus('Saved → Active Session ✓');
+            _showTemporaryStatus(
+              'Saved → $_lastRoutingDestinationName ✓',
+            );
             break;
 
           case 'active_workspace':
-            _showTemporaryStatus('Saved → Active Workspace ✓');
-            break;
-
           case 'workspace':
             _showTemporaryStatus(
-              'Saved → ${_workspaceName(workspaceId)} ✓',
+              'Saved → $_lastRoutingDestinationName ✓',
             );
             break;
 
@@ -525,6 +551,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Unknown workspace';
   }
 
+  String _sessionName(String? sessionId) {
+    if (sessionId == null) {
+      return 'Inbox';
+    }
+
+    for (final session in _sessions) {
+      if (session.id == sessionId) {
+        return session.title;
+      }
+    }
+
+    return 'Unknown session';
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleCaptures = _visibleCaptures;
@@ -606,6 +646,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         onRefresh: _loadInitialData,
                       ),
                       const SizedBox(height: 12),
+                      RoutingFeedbackBanner(
+                        decision: _lastRoutingDecision,
+                        destinationName:
+                            _lastRoutingDestinationName,
+                      ),
+                      if (_lastRoutingDecision != null)
+                        const SizedBox(height: 12),
                       Text(
                         heading,
                         style: const TextStyle(
