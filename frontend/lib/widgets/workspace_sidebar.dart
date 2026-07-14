@@ -6,7 +6,9 @@ class WorkspaceSidebar extends StatelessWidget {
   final List<Workspace> workspaces;
   final bool isLoading;
   final String? selectedFilterId;
+
   final ValueChanged<String?> onFilterSelected;
+  final VoidCallback onOpenIntelligence;
 
   const WorkspaceSidebar({
     super.key,
@@ -14,6 +16,7 @@ class WorkspaceSidebar extends StatelessWidget {
     required this.isLoading,
     required this.selectedFilterId,
     required this.onFilterSelected,
+    required this.onOpenIntelligence,
   });
 
   @override
@@ -21,7 +24,9 @@ class WorkspaceSidebar extends StatelessWidget {
     return SizedBox(
       width: 250,
       child: Material(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerLow,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -60,7 +65,8 @@ class WorkspaceSidebar extends StatelessWidget {
                       final workspace = workspaces[index];
 
                       return ListTile(
-                        leading: const Icon(Icons.folder_outlined),
+                        leading:
+                            const Icon(Icons.folder_outlined),
                         title: Text(workspace.name),
                         subtitle: workspace.description == null
                             ? null
@@ -69,12 +75,22 @@ class WorkspaceSidebar extends StatelessWidget {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                        selected: selectedFilterId == workspace.id,
-                        onTap: () => onFilterSelected(workspace.id),
+                        selected:
+                            selectedFilterId == workspace.id,
+                        onTap: () {
+                          onFilterSelected(workspace.id);
+                        },
                       );
                     },
                   ),
                 ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.psychology_outlined),
+                title: const Text('Intelligence'),
+                subtitle: const Text('Inspect Nexus decisions'),
+                onTap: onOpenIntelligence,
+              ),
             ],
           ),
         ),

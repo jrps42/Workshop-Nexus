@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/capture.dart';
+import '../models/intelligence_state.dart';
 import '../models/routing_decision.dart';
 import '../models/session.dart';
 import '../models/workspace.dart';
@@ -15,6 +16,7 @@ import '../widgets/capture_editor.dart';
 import '../widgets/capture_list.dart';
 import '../widgets/create_session_dialog.dart';
 import '../widgets/current_context_panel.dart';
+import '../widgets/intelligence_console.dart';
 import '../widgets/routing_feedback_banner.dart';
 import '../widgets/session_history_dialog.dart';
 import '../widgets/workspace_sidebar.dart';
@@ -255,11 +257,6 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         switch (destination) {
           case 'active_session':
-            _showTemporaryStatus(
-              'Saved → $_lastRoutingDestinationName ✓',
-            );
-            break;
-
           case 'active_workspace':
           case 'workspace':
             _showTemporaryStatus(
@@ -422,6 +419,37 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _showIntelligenceConsole() async {
+    final intelligenceState = IntelligenceState(
+      workspaceName: _workspaceNameOrNull(
+        _activeWorkspaceId,
+      ),
+      sessionName: _sessionNameOrNull(
+        _activeSessionId,
+      ),
+      destination: _lastRoutingDecision == null
+          ? null
+          : _lastRoutingDestinationName,
+      confidence: _lastRoutingDecision?.confidence,
+      reason: _lastRoutingDecision?.reason,
+    );
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => IntelligenceConsole(
+        state: intelligenceState,
+        onRefresh: () {
+          Navigator.of(dialogContext).pop();
+          _loadInitialData();
+        },
+      ),
+    );
+
+    if (mounted) {
+      _captureFocusNode.requestFocus();
+    }
+  }
+
   void _showTemporaryStatus(String message) {
     setState(() {
       _statusMessage = message;
@@ -538,8 +566,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _workspaceName(String? workspaceId) {
+    return _workspaceNameOrNull(workspaceId) ?? 'Inbox';
+  }
+
+  String? _workspaceNameOrNull(String? workspaceId) {
     if (workspaceId == null) {
-      return 'Inbox';
+      return null;
     }
 
     for (final workspace in _workspaces) {
@@ -552,8 +584,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _sessionName(String? sessionId) {
+    return _sessionNameOrNull(sessionId) ?? 'Inbox';
+  }
+
+  String? _sessionNameOrNull(String? sessionId) {
     if (sessionId == null) {
-      return 'Inbox';
+      return null;
     }
 
     for (final session in _sessions) {
@@ -587,6 +623,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedWorkspaceFilterId = filterId;
               });
             },
+            onOpenIntelligence: _showIntelligenceConsole,
           ),
           const VerticalDivider(width: 1),
           Expanded(
