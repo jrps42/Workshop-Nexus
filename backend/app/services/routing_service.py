@@ -3,8 +3,14 @@ from uuid import UUID
 
 from sqlmodel import Session as DatabaseSession, select
 
-from backend.app.models.routing import RoutingDecision, RoutingRequest
-from backend.app.models.session import Session, SessionStatus
+from backend.app.models.routing import (
+    RoutingDecision,
+    RoutingRequest,
+)
+from backend.app.models.session import (
+    Session,
+    SessionStatus,
+)
 from backend.app.models.workspace import Workspace
 
 
@@ -38,21 +44,59 @@ _STOP_WORDS = {
 }
 
 
+# These terms indicate that a capture is probably a personal
+# reminder or errand rather than project work.
+_GENERAL_LIFE_TERMS = {
+    "appointment",
+    "beef",
+    "bread",
+    "call",
+    "dentist",
+    "doctor",
+    "eggs",
+    "errand",
+    "grocery",
+    "groceries",
+    "laundry",
+    "milk",
+    "pharmacy",
+    "shopping",
+    "store",
+}
+
+
+# These phrases are strong indicators that the capture should
+# remain in the Inbox unless it also has clear project evidence.
+_GENERAL_LIFE_PHRASES = {
+    "add to grocery list",
+    "buy ground beef",
+    "call the dentist",
+    "grocery list",
+    "pick up groceries",
+    "remember to buy",
+}
+
+
 class RoutingService:
     """
     Provides explainable capture-routing recommendations.
 
-    This first implementation uses token matching rather than an LLM.
+    Active context is treated as a useful hint, not a forced
+    destination. Uncertain or unrelated captures remain in Inbox.
     """
 
-    def __init__(self, database_session: DatabaseSession):
+    def __init__(
+        self,
+        database_session: DatabaseSession,
+    ):
         self.database_session = database_session
 
     def suggest_route(
         self,
         request: RoutingRequest,
     ) -> RoutingDecision:
-        capture_tokens = self._tokenize(request.content)
+        content = request.content.strip()
+        capture_tokens = self._tokenize(content)
 
         workspaces = list(
             self.database_session.exec(
@@ -86,72 +130,126 @@ class RoutingService:
             session_by_id,
         )
 
-        if active_session is not None:
-            session_score = self._score_text(
-                capture_tokens,
-                self._session_text(active_session),
+        life_score = self._general_life_score(
+            content=content,
+            capture_tokens=capture_tokens,
+        )
+
+        active_workspace_score = 0
+        active_session_score = 0
+
+        if active_workspace is not None:
+            active_workspace_score = self._score_entity(
+                content=content,
+                capture_tokens=capture_tokens,
+                entity_name=active_workspace.name,
+                comparison_text=self._workspace_text(
+                    active_workspace
+                ),
             )
 
-            related_workspace = self._get_workspace(
+        if active_session is not None:
+            active_session_score = self._score_entity(
+                content=content,
+                capture_tokens=capture_tokens,
+                entity_name=active_session.title,
+                comparison_text=self._session_text(
+                    active_session
+                ),
+            )
+
+            session_workspace = self._get_workspace(
                 active_session.workspace_id,
                 workspace_by_id,
             )
 
-            workspace_score = 0
+            session_workspace_score = 0
 
-            if related_workspace is not None:
-                workspace_score = self._score_text(
-                    capture_tokens,
-                    self._workspace_text(related_workspace),
+            if session_workspace is not None:
+                session_workspace_score = self._score_entity(
+                    content=content,
+                    capture_tokens=capture_tokens,
+                    entity_name=session_workspace.name,
+                    comparison_text=self._workspace_text(
+                        session_workspace
+                    ),
                 )
 
-            combined_score = (
-                session_score * 3
-                + workspace_score * 2
+            combined_session_score = (
+                active_session_score * 3
+                + session_workspace_score * 2
             )
 
-            if combined_score >= 3:
+            # A session needs meaningful evidence. Merely having
+            # an active session is not sufficient.
+            if (
+                combined_session_score >= 4
+                and combined_session_score > life_score
+            ):
                 return RoutingDecision(
                     workspace_id=active_session.workspace_id,
                     session_id=active_session.id,
                     destination="active_session",
                     confidence=self._confidence(
-                        combined_score,
+                        combined_session_score
                     ),
                     reason=(
-                        "The capture overlaps with the active "
+                        "The capture strongly matches the active "
                         "session or its workspace."
                     ),
                 )
 
-        if active_workspace is not None:
-            active_workspace_score = self._score_text(
-                capture_tokens,
-                self._workspace_text(active_workspace),
+        # General-life language wins when there is no clear
+        # workspace or session evidence.
+        strongest_active_score = max(
+            active_workspace_score,
+            active_session_score,
+        )
+
+        if (
+            life_score >= 3
+            and life_score > strongest_active_score
+        ):
+            return RoutingDecision(
+                workspace_id=None,
+                session_id=None,
+                destination="inbox",
+                confidence=self._confidence(life_score),
+                reason=(
+                    "The capture appears to be a general reminder, "
+                    "errand, or personal thought unrelated to the "
+                    "active project context."
+                ),
             )
 
-            if active_workspace_score >= 1:
-                return RoutingDecision(
-                    workspace_id=active_workspace.id,
-                    session_id=None,
-                    destination="active_workspace",
-                    confidence=self._confidence(
-                        active_workspace_score * 2,
-                    ),
-                    reason=(
-                        "The capture matches the active "
-                        "workspace, but not strongly enough "
-                        "to attach to the active session."
-                    ),
-                )
+        if (
+            active_workspace is not None
+            and active_workspace_score >= 2
+        ):
+            return RoutingDecision(
+                workspace_id=active_workspace.id,
+                session_id=None,
+                destination="active_workspace",
+                confidence=self._confidence(
+                    active_workspace_score
+                ),
+                reason=(
+                    "The capture matches the active workspace, "
+                    "but not the active session strongly enough."
+                ),
+            )
 
         best_workspace: Workspace | None = None
         best_workspace_score = 0
 
         for workspace in workspaces:
-            score = self._score_text(
-                capture_tokens,
-                self._workspace_text(workspace),
+            score = self._score_entity(
+                content=content,
+                capture_tokens=capture_tokens,
+                entity_name=workspace.name,
+                comparison_text=self._workspace_text(
+                    workspace
+                ),
             )
 
             if score > best_workspace_score:
@@ -160,14 +258,15 @@ class RoutingService:
 
         if (
             best_workspace is not None
-            and best_workspace_score >= 1
+            and best_workspace_score >= 2
+            and best_workspace_score > life_score
         ):
             return RoutingDecision(
                 workspace_id=best_workspace.id,
                 session_id=None,
                 destination="workspace",
                 confidence=self._confidence(
-                    best_workspace_score * 2,
+                    best_workspace_score
                 ),
                 reason=(
                     f'The capture matches the workspace '
@@ -179,11 +278,10 @@ class RoutingService:
             workspace_id=None,
             session_id=None,
             destination="inbox",
-            confidence=0.5,
+            confidence=0.65,
             reason=(
-                "No workspace or session matched with enough "
-                "confidence, so the capture should remain in "
-                "the Inbox."
+                "No workspace or session matched strongly enough, "
+                "so the capture remains in the Inbox."
             ),
         )
 
@@ -242,7 +340,39 @@ class RoutingService:
             if part
         )
 
-    def _score_text(
+    def _score_entity(
+        self,
+        content: str,
+        capture_tokens: set[str],
+        entity_name: str,
+        comparison_text: str,
+    ) -> int:
+        score = self._token_overlap_score(
+            capture_tokens,
+            comparison_text,
+        )
+
+        normalized_content = self._normalize_text(content)
+        normalized_name = self._normalize_text(entity_name)
+
+        # Exact workspace/session name mentions are strong evidence.
+        if (
+            normalized_name
+            and normalized_name in normalized_content
+        ):
+            score += 3
+
+        # Individual name tokens are slightly more important than
+        # description tokens.
+        name_tokens = self._tokenize(entity_name)
+
+        score += len(
+            capture_tokens.intersection(name_tokens)
+        )
+
+        return score
+
+    def _token_overlap_score(
         self,
         capture_tokens: set[str],
         comparison_text: str,
@@ -257,6 +387,27 @@ class RoutingService:
             )
         )
 
+    def _general_life_score(
+        self,
+        content: str,
+        capture_tokens: set[str],
+    ) -> int:
+        normalized_content = self._normalize_text(
+            content
+        )
+
+        score = len(
+            capture_tokens.intersection(
+                _GENERAL_LIFE_TERMS
+            )
+        ) * 2
+
+        for phrase in _GENERAL_LIFE_PHRASES:
+            if phrase in normalized_content:
+                score += 4
+
+        return score
+
     def _tokenize(self, text: str) -> set[str]:
         words = re.findall(
             r"[a-z0-9]+",
@@ -270,5 +421,16 @@ class RoutingService:
             and word not in _STOP_WORDS
         }
 
+    def _normalize_text(self, text: str) -> str:
+        words = re.findall(
+            r"[a-z0-9]+",
+            text.lower(),
+        )
+
+        return " ".join(words)
+
     def _confidence(self, score: int) -> float:
-        return min(0.95, 0.5 + score * 0.1)
+        return min(
+            0.97,
+            0.55 + score * 0.07,
+        )
