@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../inspectors/capture_inspector.dart';
 import '../models/capture.dart';
 import '../models/intelligence_state.dart';
 import '../models/routing_decision.dart';
@@ -450,6 +451,55 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Workspace? _workspaceForCapture(Capture capture) {
+    final workspaceId = capture.workspaceId;
+
+    if (workspaceId == null) {
+      return null;
+    }
+
+    for (final workspace in _workspaces) {
+      if (workspace.id == workspaceId) {
+        return workspace;
+      }
+    }
+
+    return null;
+  }
+
+  NexusSession? _sessionForCapture(Capture capture) {
+    final sessionId = capture.sessionId;
+
+    if (sessionId == null) {
+      return null;
+    }
+
+    for (final session in _sessions) {
+      if (session.id == sessionId) {
+        return session;
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _showCaptureInspector(
+    Capture capture,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => CaptureInspector(
+        capture: capture,
+        workspace: _workspaceForCapture(capture),
+        session: _sessionForCapture(capture),
+      ),
+    );
+
+    if (mounted) {
+      _captureFocusNode.requestFocus();
+    }
+  }
+
   void _showTemporaryStatus(String message) {
     setState(() {
       _statusMessage = message;
@@ -703,6 +753,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           captures: visibleCaptures,
                           workspaces: _workspaces,
                           isLoading: _isLoadingCaptures,
+                          onCaptureSelected:
+                              _showCaptureInspector,
                           onWorkspaceChanged:
                               _assignWorkspace,
                           onDelete: _deleteCapture,
